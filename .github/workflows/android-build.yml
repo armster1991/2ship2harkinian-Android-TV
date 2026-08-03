@@ -51,9 +51,37 @@ jobs:
         working-directory: Android
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Create signing key
+        run: |
+          keytool -genkeypair \
+            -keystore android-tv.keystore \
+            -storepass androidtv \
+            -keypass androidtv \
+            -alias androidtv \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android TV Build, OU=Personal, O=Personal, L=Unknown, ST=Unknown, C=BR"
+
+      - name: Sign release APK
+        run: |
+          UNSIGNED_APK=$(find Android/app/build/outputs/apk/release -name "*-unsigned.apk" | head -n 1)
+
+          "$ANDROID_HOME/build-tools/33.0.2/apksigner" sign \
+            --ks android-tv.keystore \
+            --ks-key-alias androidtv \
+            --ks-pass pass:androidtv \
+            --key-pass pass:androidtv \
+            --out Android/app/build/outputs/apk/release/2ship-android-tv-signed.apk \
+            "$UNSIGNED_APK"
+
+          "$ANDROID_HOME/build-tools/33.0.2/apksigner" verify \
+            --verbose \
+            Android/app/build/outputs/apk/release/2ship-android-tv-signed.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: 2ship-android-tv-apk
-          path: Android/app/build/outputs/apk/release/*.apk
+          path: Android/app/build/outputs/apk/release/2ship-android-tv-signed.apk
           if-no-files-found: error
