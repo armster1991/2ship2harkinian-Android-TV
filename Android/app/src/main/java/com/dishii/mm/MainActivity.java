@@ -32,6 +32,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.ImageView;
 
@@ -613,11 +614,26 @@ public class MainActivity extends SDLActivity{
                 }
             });
         });
+    }
 
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
 
+        if (keyCode == KeyEvent.KEYCODE_BACK ||
+                keyCode == KeyEvent.KEYCODE_BUTTON_SELECT) {
 
-}
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                setButton(ControllerButtons.BUTTON_BACK, true);
+                return true;
+            }
 
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                setButton(ControllerButtons.BUTTON_BACK, false);
+                return true;
+            }
+        }
 
-
+        return super.dispatchKeyEvent(event);
+    }
 }
