@@ -619,6 +619,11 @@ public class MainActivity extends SDLActivity{
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_MODE &&
+        event.getAction() == KeyEvent.ACTION_DOWN) {
+    finishAndRemoveTask();
+    return true;
+}
 
         if (keyCode == KeyEvent.KEYCODE_BACK ||
                 keyCode == KeyEvent.KEYCODE_BUTTON_SELECT) {
