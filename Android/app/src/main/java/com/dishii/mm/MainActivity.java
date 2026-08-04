@@ -41,6 +41,9 @@ public class MainActivity extends SDLActivity{
 
     SharedPreferences preferences;
     private static final CountDownLatch setupLatch = new CountDownLatch(1);
+    private boolean leftShoulderPressed = false;
+    private boolean rightShoulderPressed = false;
+    private boolean enhancementsComboActive = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -619,6 +622,36 @@ public class MainActivity extends SDLActivity{
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        boolean pressed = event.getAction() == KeyEvent.ACTION_DOWN;
+
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_L1) {
+            leftShoulderPressed = pressed;
+
+            if (leftShoulderPressed && rightShoulderPressed && !enhancementsComboActive) {
+                enhancementsComboActive = true;
+                SDLActivity.onNativeKeyDown(KeyEvent.KEYCODE_BACK);
+            } else if (!leftShoulderPressed && enhancementsComboActive) {
+                enhancementsComboActive = false;
+                SDLActivity.onNativeKeyUp(KeyEvent.KEYCODE_BACK);
+            }
+
+            return super.dispatchKeyEvent(event);
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_R1) {
+            rightShoulderPressed = pressed;
+
+            if (leftShoulderPressed && rightShoulderPressed && !enhancementsComboActive) {
+                enhancementsComboActive = true;
+                SDLActivity.onNativeKeyDown(KeyEvent.KEYCODE_BACK);
+            } else if (!rightShoulderPressed && enhancementsComboActive) {
+                enhancementsComboActive = false;
+                SDLActivity.onNativeKeyUp(KeyEvent.KEYCODE_BACK);
+            }
+
+            return super.dispatchKeyEvent(event);
+        }
+
         if (keyCode == KeyEvent.KEYCODE_BUTTON_MODE &&
         event.getAction() == KeyEvent.ACTION_DOWN) {
     finishAndRemoveTask();
