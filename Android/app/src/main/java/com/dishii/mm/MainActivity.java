@@ -86,11 +86,9 @@ public class MainActivity extends SDLActivity{
         File targetRootFolder = new File(Environment.getExternalStorageDirectory(), "2S2H");
 
         File sohFile = new File(targetRootFolder, "2ship.o2r");
-        File ootFile = new File(targetRootFolder, "mm.o2r");
         File assetsFolder = new File(targetRootFolder, "assets");
 
         deleteIfExists(sohFile);
-        deleteIfExists(ootFile);
         deleteRecursiveIfExists(assetsFolder);
     }
 
