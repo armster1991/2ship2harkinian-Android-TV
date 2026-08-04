@@ -184,7 +184,8 @@ public class MainActivity extends SDLActivity{
                     })
                     .show();
         } else {
-            // No setup needed, still need to count down
+            // Required game files already exist. Only create the default config if the user has none.
+            copyDefaultConfigIfMissing(targetRootFolder);
             setupLatch.countDown();
         }
     }
@@ -271,7 +272,33 @@ public class MainActivity extends SDLActivity{
             runOnUiThread(() -> Toast.makeText(this, "Error copying 2ship.o2r", Toast.LENGTH_LONG).show());
         }
 
+        copyDefaultConfigIfMissing(targetRootFolder);
         setupLatch.countDown();
+    }
+
+    private void copyDefaultConfigIfMissing(File targetRootFolder) {
+        File targetConfigFile = new File(targetRootFolder, "2ship2harkinian.json");
+
+        if (targetConfigFile.exists()) {
+            Log.i("setupFiles", "Existing 2ship2harkinian.json preserved");
+            return;
+        }
+
+        try (InputStream in = getAssets().open("2ship2harkinian.json");
+             OutputStream out = new FileOutputStream(targetConfigFile)) {
+
+            byte[] buffer = new byte[1024];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+
+            Log.i("setupFiles", "Default 2ship2harkinian.json copied");
+            runOnUiThread(() -> Toast.makeText(this, "Default configuration copied", Toast.LENGTH_SHORT).show());
+        } catch (IOException e) {
+            Log.e("setupFiles", "Failed to copy default 2ship2harkinian.json", e);
+            runOnUiThread(() -> Toast.makeText(this, "Error copying default configuration", Toast.LENGTH_LONG).show());
+        }
     }
 
 
