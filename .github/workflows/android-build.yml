@@ -13,6 +13,43 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install host build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $(cat .github/workflows/apt-deps.txt) libzip-dev zipcmp zipmerge ziptool
+
+      - name: Install latest SDL
+        run: |
+          wget https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-2.28.5.tar.gz
+          tar -xzf SDL2-2.28.5.tar.gz
+          cd SDL2-2.28.5
+          ./configure --enable-hidapi-libusb
+          make -j "$(nproc)"
+          sudo make install
+          sudo cp -av /usr/local/lib/libSDL* /lib/x86_64-linux-gnu/
+
+      - name: Install latest tinyxml2
+        run: |
+          sudo apt-get remove -y libtinyxml2-dev
+          wget https://github.com/leethomason/tinyxml2/archive/refs/tags/10.0.0.tar.gz
+          tar -xzf 10.0.0.tar.gz
+          cd tinyxml2-10.0.0
+          mkdir -p build && cd build
+          cmake ..
+          make
+          sudo make install
+
+      - name: Generate 2ship.o2r
+        run: |
+          cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release
+          cmake --build build-cmake --config Release --target Generate2ShipOtr -j"$(nproc)"
+          # This is the file the Android app tries to copy out of its bundled assets at
+          # first launch (MainActivity.java: getAssets().open("2ship.o2r")). Without this
+          # step, Android/app/src/main/assets/2ship.o2r never exists, so the app crashes /
+          # fails with "Error copying 2ship.o2r" on the very first run - it's not bundled
+          # by Gradle on its own, it has to be generated and placed here first.
+          cp 2ship.o2r Android/app/src/main/assets/2ship.o2r
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -51,27 +88,15 @@ jobs:
         working-directory: Android
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Create signing key
-        run: |
-          keytool -genkeypair \
-            -keystore android-tv.keystore \
-            -storepass androidtv \
-            -keypass androidtv \
-            -alias androidtv \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android TV Build, OU=Personal, O=Personal, L=Unknown, ST=Unknown, C=BR"
-
       - name: Sign release APK
         run: |
           UNSIGNED_APK=$(find Android/app/build/outputs/apk/release -name "*-unsigned.apk" | head -n 1)
 
           "$ANDROID_HOME/build-tools/33.0.2/apksigner" sign \
-            --ks android-tv.keystore \
-            --ks-key-alias androidtv \
-            --ks-pass pass:androidtv \
-            --key-pass pass:androidtv \
+            --ks Android/app/release.jks \
+            --ks-key-alias armster-2s2h \
+            --ks-pass pass:ShipOfHarkinianMM2026! \
+            --key-pass pass:ShipOfHarkinianMM2026! \
             --out Android/app/build/outputs/apk/release/2ship-android-tv-signed.apk \
             "$UNSIGNED_APK"
 
