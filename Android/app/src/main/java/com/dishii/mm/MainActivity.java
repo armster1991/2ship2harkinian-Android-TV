@@ -5,6 +5,7 @@ import org.libsdl.app.SDLActivity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
@@ -127,8 +128,13 @@ public class MainActivity extends SDLActivity{
 
 
 
-    // Check if storage permission is granted
+    // Check if storage permission is granted.
+    // Android 11+ uses the special all-files access permission; older versions use READ/WRITE.
     private boolean hasStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return Environment.isExternalStorageManager();
+        }
+
         return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -142,11 +148,17 @@ public class MainActivity extends SDLActivity{
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // Android 11+ → MANAGE_EXTERNAL_STORAGE
             if (!Environment.isExternalStorageManager()) {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                intent.setData(Uri.parse("package:" + getPackageName()));
-                startActivityForResult(intent, STORAGE_PERMISSION_REQUEST_CODE);
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivityForResult(intent, STORAGE_PERMISSION_REQUEST_CODE);
+                } catch (ActivityNotFoundException e) {
+                    Intent fallbackIntent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                    startActivityForResult(fallbackIntent, STORAGE_PERMISSION_REQUEST_CODE);
+                }
             } else {
                 // Already granted
+                doVersionCheck();
                 checkAndSetupFiles();
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -343,6 +355,7 @@ public class MainActivity extends SDLActivity{
             // Handle MANAGE_EXTERNAL_STORAGE result
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 if (Environment.isExternalStorageManager()) {
+                    doVersionCheck();
                     checkAndSetupFiles();
                 } else {
                     Toast.makeText(this, "Storage permission is required to access files.", Toast.LENGTH_LONG).show();
