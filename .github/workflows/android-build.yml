@@ -18,9 +18,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y $(cat .github/workflows/apt-deps.txt) libzip-dev zipcmp zipmerge ziptool
 
-      - name: Install latest SDL
+      - name: Install SDL 2.28.5
         run: |
-          wget https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-2.28.5.tar.gz
+          wget -q https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-2.28.5.tar.gz
           tar -xzf SDL2-2.28.5.tar.gz
           cd SDL2-2.28.5
           ./configure --enable-hidapi-libusb
@@ -28,27 +28,29 @@ jobs:
           sudo make install
           sudo cp -av /usr/local/lib/libSDL* /lib/x86_64-linux-gnu/
 
-      - name: Install latest tinyxml2
+      - name: Install tinyxml2 10.0.0
         run: |
-          sudo apt-get remove -y libtinyxml2-dev
-          wget https://github.com/leethomason/tinyxml2/archive/refs/tags/10.0.0.tar.gz
+          sudo apt-get remove -y libtinyxml2-dev || true
+          wget -q https://github.com/leethomason/tinyxml2/archive/refs/tags/10.0.0.tar.gz
           tar -xzf 10.0.0.tar.gz
           cd tinyxml2-10.0.0
-          mkdir -p build && cd build
-          cmake ..
-          make
-          sudo make install
+          cmake -S . -B build
+          cmake --build build --parallel "$(nproc)"
+          sudo cmake --install build
 
-      - name: Generate 2ship.o2r
+      - name: Generate and stage 2ship.o2r
         run: |
-          cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release
-          cmake --build build-cmake --config Release --target Generate2ShipOtr -j"$(nproc)"
-          # This is the file the Android app tries to copy out of its bundled assets at
-          # first launch (MainActivity.java: getAssets().open("2ship.o2r")). Without this
-          # step, Android/app/src/main/assets/2ship.o2r never exists, so the app crashes /
-          # fails with "Error copying 2ship.o2r" on the very first run - it's not bundled
-          # by Gradle on its own, it has to be generated and placed here first.
-          cp 2ship.o2r Android/app/src/main/assets/2ship.o2r
+          cmake --no-warn-unused-cli -S . -B build-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --config Release --target Generate2ShipOtr --parallel "$(nproc)"
+
+          test -s 2ship.o2r
+          mkdir -p Android/app/src/main/assets
+          cp -f 2ship.o2r Android/app/src/main/assets/2ship.o2r
+          test -s Android/app/src/main/assets/2ship.o2r
+
+          echo "Generated 2ship.o2r:"
+          ls -lh 2ship.o2r Android/app/src/main/assets/2ship.o2r
+          sha256sum 2ship.o2r Android/app/src/main/assets/2ship.o2r
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -61,7 +63,7 @@ jobs:
 
       - name: Install Android components
         run: |
-          yes | sdkmanager --licenses
+          yes | sdkmanager --licenses >/dev/null
           sdkmanager \
             "platforms;android-33" \
             "build-tools;33.0.2" \
@@ -69,40 +71,52 @@ jobs:
 
       - name: Install CMake 3.28.3
         run: |
-          curl -L \
+          curl -fsSL \
             https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz \
             -o cmake.tar.gz
-
           mkdir -p "$HOME/cmake-3.28.3"
-          tar -xzf cmake.tar.gz \
-            --strip-components=1 \
-            -C "$HOME/cmake-3.28.3"
-
+          tar -xzf cmake.tar.gz --strip-components=1 -C "$HOME/cmake-3.28.3"
           echo "$HOME/cmake-3.28.3/bin" >> "$GITHUB_PATH"
           echo "cmake.dir=$HOME/cmake-3.28.3" >> Android/local.properties
 
       - name: Make Gradle executable
         run: chmod +x Android/gradlew
 
-      - name: Build release APK
+      - name: Build unsigned release APK
         working-directory: Android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Sign release APK
+      - name: Locate unsigned APK
+        id: unsigned
+        shell: bash
         run: |
-          UNSIGNED_APK=$(find Android/app/build/outputs/apk/release -name "*-unsigned.apk" | head -n 1)
+          APK="$(find Android/app/build/outputs/apk/release -type f -name '*-unsigned.apk' -print -quit)"
+          if [ -z "$APK" ] || [ ! -s "$APK" ]; then
+            echo "Unsigned APK was not produced."
+            find Android/app/build/outputs -maxdepth 5 -type f -print || true
+            exit 1
+          fi
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK"
+
+      - name: Sign and verify release APK
+        shell: bash
+        run: |
+          SIGNED_APK="Android/app/build/outputs/apk/release/2ship-android-tv-signed.apk"
+
+          test -s Android/app/release.jks
 
           "$ANDROID_HOME/build-tools/33.0.2/apksigner" sign \
             --ks Android/app/release.jks \
             --ks-key-alias armster-2s2h \
             --ks-pass pass:ShipOfHarkinianMM2026! \
             --key-pass pass:ShipOfHarkinianMM2026! \
-            --out Android/app/build/outputs/apk/release/2ship-android-tv-signed.apk \
-            "$UNSIGNED_APK"
+            --out "$SIGNED_APK" \
+            "${{ steps.unsigned.outputs.apk }}"
 
-          "$ANDROID_HOME/build-tools/33.0.2/apksigner" verify \
-            --verbose \
-            Android/app/build/outputs/apk/release/2ship-android-tv-signed.apk
+          test -s "$SIGNED_APK"
+          "$ANDROID_HOME/build-tools/33.0.2/apksigner" verify --verbose --print-certs "$SIGNED_APK"
+          ls -lh "$SIGNED_APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
